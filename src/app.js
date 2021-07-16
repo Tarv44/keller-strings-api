@@ -22,12 +22,32 @@ app.get('/', (req, res) => {
 })
 
 app.post('/create-checkout-session', jsonParser, async (req, res) => {
-    console.log(req.body)
+    const {products} = req.body
+
+    console.log(products)
+    const stripeProducts = await Promise.all(products.map(async p => {
+        const {name, image} = p
+        const product = await stripe.products.create({
+            name,
+            images: ['https:' + image]
+        });
+        return product
+    }))
+    const stripePrices = await Promise.all(
+        products.map(async (p,i) => {
+            const stripePrice = await stripe.prices.create({
+                unit_amount: 2000,
+                currency: 'usd',
+                product: stripeProducts[i].id,
+            })
+            return {price: stripePrice.id, quantity: products[i].quantity}
+        })
+    ) 
     const session = await stripe.checkout.sessions.create({
         success_url: 'https://example.com/success',
         cancel_url: 'https://example.com/cancel',
         payment_method_types: ['card'],
-        line_items: req.body.products,
+        line_items: stripePrices,
         mode: 'payment',
     });
     res.send(session)
